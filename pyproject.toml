@@ -5,15 +5,19 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "faiss-cpu>=1.13.2",
     "html5lib>=1.1",
     "ipykernel>=7.2.0",
     "jupyter>=1.1.1",
     "langchain>=1.2.15",
+    "langchain-community>=0.4.1",
+    "langchain-huggingface>=1.2.2",
     "langgraph>=1.1.6",
     "pdfplumber>=0.11.9",
     "pymupdf>=1.27.2.2",
     "pypdf>=6.10.2",
     "requests>=2.33.1",
     "selenium>=4.43.0",
+    "sentence-transformers>=5.4.1",
     "tqdm>=4.67.3",
 ]
