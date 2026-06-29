@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from pydantic import Field
 from typing import TypedDict, List, Literal, Optional
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
 from langgraph.graph import StateGraph, START, END
 from langchain_ollama import ChatOllama
 from dotenv import load_dotenv
@@ -26,7 +26,7 @@ main_model = ChatOllama(model="gemma4:31b-cloud")
 
 # vector_store
 vector_store = FAISS.load_local(
-    "./data/constitution_and_ipc.faiss",
+    "C:\\Users\\panka\\genai_project\\constitution_rag\\data\\constitution_and_ipc.faiss",
     embeddings=embeddings,
     allow_dangerous_deserialization=True,
 )
@@ -37,8 +37,6 @@ tavily_tool = TavilySearch(max_results=3)
 
 # schema
 class schema(TypedDict):
-    # Not including retriever because it is inserilisable so it is giving error with inmemorystore
-    # retriever:BaseRetriever
     retrieval_required: Literal["retrieval", "web_search", "None"]
     web_searched: bool
     user_query: str
@@ -53,6 +51,7 @@ class schema(TypedDict):
     k: Optional[int] = Field(default=3)
     max_retry_for_revise_answer: Optional[int] = Field(default=3)
     max_retry_for_rewrite_query: Optional[int] = Field(default=2)
+    messages: List[BaseMessage]
 
 
 # Nodes
@@ -64,7 +63,12 @@ parser_for_retrieval_decider_node = PydanticOutputParser(
     pydantic_object=schema_for_retrieval_decider_node
 )
 
-sys_prompt_for_retrieval_decider_node = f"You are an expert legal AI Assistant specializing in the Indian Penal Code (IPC) and the Constitution of India. Your task is to analyze the user's query and determine the most appropriate retrieval method. \n\n- Choose 'retrieval' if the answer is likely to be found in the official legal documents (IPC or Constitution) stored in the internal vector database.\n- Choose 'web_search' if the query requires current events, recent legal precedents, or general information not likely to be in the static legal documents.\n- Choose 'None' if the query is a greeting or does not require external information to be answered.\n\nOutput Format -{parser_for_retrieval_decider_node.get_format_instructions()}"
+sys_prompt_for_retrieval_decider_node = f"""You are an expert legal AI Assistant specializing in the Indian Penal Code (IPC) and the 
+Constitution of India. Your task is to analyze the user's query and determine the most appropriate retrieval method. \n\n- Choose
+'retrieval' if the answer is likely to be found in the official legal documents (IPC or Constitution) stored in the internal vector
+database.\n- Choose 'web_search' if the query requires current events, recent legal precedents, or general information not likely
+to be in the static legal documents.\n- Choose 'None' if the query is a greeting or does not require external information to be 
+answered.\n\nOutput Format -{parser_for_retrieval_decider_node.get_format_instructions()}"""
 
 
 def retrieval_decider_node(state: schema):
@@ -101,7 +105,9 @@ parser_for_is_relevant_node = PydanticOutputParser(
 def is_relevant_node(state: schema):
     contexts = state["retrieved_contexts"]
     sys_prompt = SystemMessage(
-        content=f"""You are a legal analyst. Your task is to determine if the provided retrieved context is relevant to answer the user's query. \n\nAnalyze if the context contains information that is required to answer user's query. \n\nOutput format - {parser_for_is_relevant_node.get_format_instructions()}"""
+        content=f"""You are a legal analyst. Your task is to determine if the provided retrieved context is relevant to answer the 
+        user's query. \n\nAnalyze if the context contains information that is required to answer user's query. 
+        \n\nOutput format - {parser_for_is_relevant_node.get_format_instructions()}"""
     )
     hmn_prompt = f"Query - {state['user_query']}"
     lst = []
@@ -130,7 +136,12 @@ parser_for_answer_from_context_node = PydanticOutputParser(
 def answer_from_context_node(state: schema):
     contexts = state["relevant_contexts"]
     sys_prompt_for_answer_from_context_node = SystemMessage(
-        content=f"""You are an expert legal AI Assistant. Your task is to answer the user's query accurately using the provided contexts. \n\nCRITICAL INSTRUCTIONS:\n1. Use ONLY the provided context to answer the query.\n2. If the answer is not present in the context, explicitly state that the information is not available in the provided documents.\n3. You MUST cite your sources. For every claim or piece of information, quote the relevant part of the context or provide the URL if it's a web search result (e.g., \"According to [Source/URL], ...\").\n4. Maintain a professional and objective legal tone.\n\nOutput format - {parser_for_answer_from_context_node.get_format_instructions()}"""
+        content=f"""You are an expert legal AI Assistant. Your task is to answer the user's query accurately using the provided 
+        contexts. \n\nCRITICAL INSTRUCTIONS:\n1. Use ONLY the provided context to answer the query.\n2. If the answer is not 
+        present in the context, explicitly state that the information is not available in the provided documents.\n3. 
+        You MUST cite your sources. For every claim or piece of information, quote the relevant part of the context or provide the 
+        URL if it's a web search result (e.g., \"According to [Source/URL], ...\").\n4. Maintain a professional and objective legal tone.
+        \n\nOutput format - {parser_for_answer_from_context_node.get_format_instructions()}"""
     )
 
     context = ""
@@ -141,7 +152,9 @@ def answer_from_context_node(state: schema):
     hmn_prompt = HumanMessage(
         content=f"Query - {state['user_query']} \n\n Contexts - {context}"
     )
-    inp = [sys_prompt_for_answer_from_context_node, hmn_prompt]
+    inp = [sys_prompt_for_answer_from_context_node]
+    inp += [i for i in state["messages"]]
+    inp += hmn_prompt
 
     res = parser_for_answer_from_context_node.invoke(
         main_model.invoke(inp).content
@@ -164,7 +177,10 @@ parser_for_schema_for_check_answer_grounded_node = PydanticOutputParser(
 def check_answer_grounded_node(state: schema):
     contexts = state["relevant_contexts"]
     sys_prompt = SystemMessage(
-        content=f"You are a legal auditor. Your task is to verify if the generated answer is fully supported by the provided context. \n\nCheck for any hallucinations, inaccuracies, or information added that is not present in the context. If the answer is not fully supported, identify the specific part of the answer that lacks evidence and explain why. \n\nOutput format - {parser_for_schema_for_check_answer_grounded_node.get_format_instructions()}"
+        content=f"""You are a legal auditor. Your task is to verify if the generated answer is fully supported by the provided 
+        context. \n\nCheck for any hallucinations, inaccuracies, or information added that is not present in the context. 
+        If the answer is not fully supported, identify the specific part of the answer that lacks evidence and explain why. 
+        \n\nOutput format - {parser_for_schema_for_check_answer_grounded_node.get_format_instructions()}"""
     )
     context = ""
     for i in contexts:
@@ -202,11 +218,15 @@ def revise_answer_node(state: schema):
     evidence = state["evidence"]
 
     sys_prompt = SystemMessage(
-        content=f"You are a legal editor. You will be provided with a user query, a generated answer, the relevant contexts, and evidence showing why the current answer is not fully supported by the contexts. \n\nYour task is to revise the answer so that it is completely grounded in the provided contexts. Ensure that all claims are supported by the evidence and that you maintain the requirement to quote sources/URLs in the final response.\n\nOutput format - {parser_for_revise_answer_node.get_format_instructions()}"
+        content=f"""You are a legal editor. You will be provided with a user query, a generated answer, the relevant contexts, 
+        and evidence showing why the current answer is not fully supported by the contexts. 
+        \n\nYour task is to revise the answer so that it is completely grounded in the provided contexts. 
+        Ensure that all claims are supported by the evidence and that you maintain the requirement to quote sources/URLs in the 
+        final response.\n\nOutput format - {parser_for_revise_answer_node.get_format_instructions()}"""
     )
 
     human_pr = HumanMessage(
-        content=f"Query - {user_query} \n\n Generated Response - {generated_response} \n\n Contexts - {x} \n\n Evidence - {evidence}"
+        content=f"""Query - {user_query} \n\n Generated Response - {generated_response} \n\n Contexts - {x} \n\n Evidence - {evidence}"""
     )
 
     revised_answer = parser_for_revise_answer_node.invoke(
@@ -214,7 +234,7 @@ def revise_answer_node(state: schema):
     )
 
     return {
-        "generated_response": res.revised_response,
+        "generated_response": revised_answer.revised_response,
         "max_retry_for_revise_answer": state["max_retry_for_revise_answer"] - 1,
     }
 
@@ -235,7 +255,9 @@ def is_answer_useful_node(state: schema):
     generated_response = state["generated_response"]
 
     sys_prompt = SystemMessage(
-        content=f"You are a legal quality assurance judge. Your task is to evaluate whether the generated response successfully and accurately solves the user's query based on the legal contexts provided. \n\nConsider if the answer is complete, accurate, and directly addresses the user's core question. \n\nOutput format - {parser_for_is_answer_useful_node.get_format_instructions()}"
+        content=f"""You are a quality assurance judge. Your task is to evaluate whether the generated response successfully and 
+        accurately solves the user's query . \n\nConsider if the answer is complete, accurate, and directly addresses the user's
+        core question. \n\nOutput format - {parser_for_is_answer_useful_node.get_format_instructions()}"""
     )
     human_pr = HumanMessage(
         content=f"Query - {user_query} \n\n Generated Response - {generated_response}"
@@ -258,7 +280,10 @@ parser_for_rewrite_query_node = PydanticOutputParser(
 
 def rewrite_query_node(state: schema):
     sys_prompt = SystemMessage(
-        content=f"You are a legal search expert. Your task is to rewrite a user's query to make it highly optimized for vector database retrieval. \n\nThe database contains legal documents from the Indian Constitution and other official Acts. If the user's query is vague or colloquial, expand it using legal terminology and specify the likely sections or themes it relates to, while maintaining the original intent. \n\nOutput Format - {parser_for_rewrite_query_node.get_format_instructions()}"
+        content=f"""You are a legal search expert. Your task is to rewrite a user's query to make it highly optimized for vector 
+        database retrieval. \n\nThe database contains legal documents from the Indian Constitution and other official Acts. 
+        If the user's query is vague or colloquial, expand it using legal terminology and specify the likely sections or themes 
+        it relates to, while maintaining the original intent. \n\nOutput Format - {parser_for_rewrite_query_node.get_format_instructions()}"""
     )
     human_pr = state["user_query"]
 
@@ -296,7 +321,7 @@ def is_answer_useful_condition(state: schema):
     return state["is_answer_useful"] and state["max_retry_for_rewrite_query"] > 0
 
 
-conn=sqlite3.connect("statedb.db", check_same_thread=False)
+conn = sqlite3.connect("statedb.db", check_same_thread=False)
 ck_ptr = SqliteSaver(conn=conn)
 
 graph = StateGraph(state_schema=schema)
@@ -349,26 +374,3 @@ graph.add_edge("rewrite_query_node", "retrieval_decider_node")
 
 
 workflow = graph.compile(checkpointer=ck_ptr)
-
-if __name__ == "__main__":
-    while True:
-        human = input("\n\nHuman- ")
-        if human == "exit":
-            break
-        print()
-        initial_state = {
-            # 'retriever':retriever,
-            "user_query": human,
-            "k": 3,
-            "max_retry_for_revise_answer": 3,
-            "max_retry_for_rewrite_query": 2,
-        }
-
-        print("RUNNING WORKFLOW")
-        for chunk in workflow.stream(
-            initial_state, {"configurable": {"thread_id": "2"}},stream_mode="updates"
-        ):
-            print(f"{list(chunk.keys())[0]} is completed")
-
-        response=workflow.get_state(config={"configurable": {"thread_id": "2"}})
-        print("\nAI- ", response.values["generated_response"])
