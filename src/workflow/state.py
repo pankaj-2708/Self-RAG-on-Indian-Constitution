@@ -1,0 +1,20 @@
+from typing import TypedDict, List, Literal, Optional
+from pydantic import Field
+from langchain_core.messages import BaseMessage
+
+class schema(TypedDict):
+    retrieval_required: Literal["retrieval", "web_search", "None"]
+    web_searched: bool
+    user_query: str
+    retrieved_contexts: List[str]
+    relevant_contexts: List[str]
+    answer_for_query: str
+    generated_response: str
+    is_grounded: bool
+    is_supported: bool
+    is_answer_useful: bool
+    evidence: str
+    k: Optional[int] = Field(default=3)
+    max_retry_for_revise_answer: Optional[int] = Field(default=3)
+    max_retry_for_rewrite_query: Optional[int] = Field(default=2)
+    messages: List[BaseMessage]
