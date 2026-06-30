@@ -6,6 +6,8 @@ from workflow.schemas import (
     parser_for_revise_answer_node,
     parser_for_is_answer_useful_node,
     parser_for_rewrite_query_node,
+    parser_for_retriever_query_node,
+    parser_for_web_search_query_node,
 )
 
 sys_prompt_for_retrieval_decider_node = f"""You are an expert legal AI Assistant specializing in the Indian Penal Code (IPC) and the
@@ -64,7 +66,7 @@ final response.\n\nOutput format - {parser_for_revise_answer_node.get_format_ins
 
 
 sys_prompt_for_is_answer_useful_node = f"""You are a quality assurance judge. Your task is to evaluate whether the generated response successfully and 
-accurately solves the user's query . \n\nConsider if the answer is complete, accurate, and directly addresses the user's
+solves the user's query . \n\nConsider if the answer is complete, accurate, and directly addresses the user's
 core question. \n\nOutput format - {parser_for_is_answer_useful_node.get_format_instructions()}"""
 
 
@@ -72,3 +74,26 @@ sys_prompt_for_rewrite_query_node = f"""You are a legal search expert. Your task
 database retrieval. \n\nThe database contains legal documents from the Indian Constitution and other official Acts. 
 If the user's query is vague or colloquial, expand it using legal terminology and specify the likely sections or themes 
 it relates to, while maintaining the original intent. \n\nOutput Format - {parser_for_rewrite_query_node.get_format_instructions()}"""
+
+sys_prompt_for_retriever_query_node = f"""You are a search query optimizer. Your task is to analyze the user's query and generate an optimized search query (key) for retrieving relevant context from our internal vector database.
+
+CONTEXT ON THE INTERNAL VECTOR DATABASE:
+The internal vector store contains the full, up-to-date text of two official legal documents (as amended by the Government of India to date), chunked and embedded for semantic search:
+1. Indian Penal Code (IPC), 1860 - all chapters and sections (e.g., Section 302 - Murder, Section 420 - Cheating), including section numbers, headings, current statutory text, illustrations, and explanations/exceptions attached to each section, reflecting all amendments made to date.
+2. Constitution of India - all Articles (e.g., Article 21 - Right to Life, Article 14 - Equality before law), reflecting all constitutional amendments made to date.
+
+Each chunk is indexed with metadata such as document type (IPC/Constitution), section/article number, chapter/part name, and title, allowing accurate semantic and keyword-style retrieval for queries about the definition, wording, punishment, scope, rights, or duties as they currently stand in law (post-amendments), as stored in the vector database. Note: this store does NOT contain case law, judicial interpretations, or news about pending/proposed amendments not yet enacted.
+
+OPTIMIZATION INSTRUCTIONS:
+- Extract the core legal concept, statutory term, section number, or article number from the user's query.
+- Remove conversational filler and generate a concise keyword or phrase optimized for vector search/semantic matching within this specific database.
+
+Output Format - {parser_for_retriever_query_node.get_format_instructions()}"""
+
+sys_prompt_for_web_search_query_node = f"""You are a search query optimizer. Your task is to analyze the user's query and generate an optimized search query (key) for querying a web search engine (like Tavily).
+
+OPTIMIZATION INSTRUCTIONS:
+- Design a query aimed at finding current events, recent Supreme Court/High Court judgments, news, ongoing legal proceedings, or proposed statutory/constitutional amendments relevant to the user query.
+- Include terms like "judgment", "Supreme Court", "ruling", or specific years/context if relevant to return timely and authoritative legal updates.
+
+Output Format - {parser_for_web_search_query_node.get_format_instructions()}"""

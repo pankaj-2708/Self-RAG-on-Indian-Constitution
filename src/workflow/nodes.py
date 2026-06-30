@@ -11,7 +11,9 @@ from workflow.schemas import (
     parser_for_schema_for_check_answer_grounded_node,
     parser_for_revise_answer_node,
     parser_for_is_answer_useful_node,
-    parser_for_rewrite_query_node
+    parser_for_rewrite_query_node,
+    parser_for_retriever_query_node,
+    parser_for_web_search_query_node
 )
 from workflow.prompts import (
     sys_prompt_for_retrieval_decider_node,
@@ -20,8 +22,11 @@ from workflow.prompts import (
     sys_prompt_for_check_answer_grounded_node,
     sys_prompt_for_revise_answer_node,
     sys_prompt_for_is_answer_useful_node,
-    sys_prompt_for_rewrite_query_node
+    sys_prompt_for_rewrite_query_node,
+    sys_prompt_for_retriever_query_node,
+    sys_prompt_for_web_search_query_node
 )
+from langgraph.types import Send
 
 def retrieval_decider_node(state: schema):
     inp = [
@@ -33,31 +38,53 @@ def retrieval_decider_node(state: schema):
     ).retrieval_required
     return {"retrieval_required": res}
 
+def generate_retriever_query_node(state: schema):
+    inp = [
+        SystemMessage(content=sys_prompt_for_retriever_query_node),
+        HumanMessage(content=f"User Query - {state['user_query']}"),
+    ]
+    res = parser_for_retriever_query_node.invoke(
+        main_model.invoke(inp).content
+    ).retriever_query
+    return {"retriever_query": res}
+
 def retrieve_node(state: schema):
     global retriever
-    retrieved_contexts = retriever.invoke(state["user_query"], k=state["k"])
+    query = state.get("retriever_query") or state["user_query"]
+    retrieved_contexts = retriever.invoke(query, k=state["k"])
     return {"retrieved_contexts": [i.page_content for i in retrieved_contexts]}
 
 def direct_generation_node(state: schema):
     res = main_model.invoke(state["user_query"]).content
     return {"generated_response": res}
 
-def is_relevant_node(state: schema):
+def fanout_relevant_node(state:schema):
     contexts = state["retrieved_contexts"]
-    sys_prompt = SystemMessage(content=sys_prompt_for_is_relevant_node)
-    hmn_prompt = f"Query - {state['user_query']}"
     lst = []
+
     for context in contexts:
-        hmn_prompt_dash = hmn_prompt + f"\n Context - \n {context}"
-        res = parser_for_is_relevant_node.invoke(
+        lst.append(Send("is_relevant_node",{"context":context,"user_query":state['user_query']}))
+    
+    return lst
+
+def is_relevant_node(inp):
+    sys_prompt = SystemMessage(content=sys_prompt_for_is_relevant_node)
+    hmn_prompt = f"Query - {inp['user_query']}" + f"\n Context - \n {inp['context']}"
+
+    res = parser_for_is_relevant_node.invoke(
             main_model.invoke(
-                [sys_prompt, HumanMessage(content=hmn_prompt_dash)]
+                [sys_prompt, HumanMessage(content=hmn_prompt)]
             ).content
         )
+    
+    if res.is_relevant_context :
+        return {"relevant_contexts": [inp['context']] }
+    else:
+        return {}
 
-        lst.append(res.is_relevant_context)
-
-    return {"relevant_contexts": [contexts[i] for i in range(len(contexts)) if lst[i]]}
+def aggregate_relevance(state):
+    # plain pass-through node, just a sync point
+    return {}
 
 def answer_from_context_node(state: schema):
     contexts = state["relevant_contexts"]
@@ -71,9 +98,7 @@ def answer_from_context_node(state: schema):
     hmn_prompt = HumanMessage(
         content=f"Query - {state['user_query']} \n\n Contexts - \n {context}"
     )
-    inp = [sys_prompt]
-    inp += [i for i in state["messages"]]
-    inp += [hmn_prompt]
+    inp = [sys_prompt,hmn_prompt]
 
     res = parser_for_answer_from_context_node.invoke(
         main_model.invoke(inp).content
@@ -149,8 +174,19 @@ def rewrite_query_node(state: schema):
         "max_retry_for_rewrite_query": state["max_retry_for_rewrite_query"] - 1,
     }
 
+def generate_web_search_query_node(state: schema):
+    inp = [
+        SystemMessage(content=sys_prompt_for_web_search_query_node),
+        HumanMessage(content=f"User Query - {state['user_query']}"),
+    ]
+    res = parser_for_web_search_query_node.invoke(
+        main_model.invoke(inp).content
+    ).web_search_query
+    return {"web_search_query": res}
+
 def web_search_node(state: schema):
-    x = tavily_tool.invoke(state["user_query"])
+    query = state.get("web_search_query") or state["user_query"]
+    x = tavily_tool.invoke(query)
     res = []
     for r in x["results"]:
         p = f"Source - {r['url']} \n title - {r['title']} \n {r['content']}"

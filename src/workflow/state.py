@@ -1,13 +1,17 @@
-from typing import TypedDict, List, Literal, Optional
+from typing import TypedDict, List, Literal, Optional,Annotated
 from pydantic import Field
 from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
+
 
 class schema(TypedDict):
     retrieval_required: Literal["retrieval", "web_search", "None"]
     web_searched: bool
     user_query: str
+    retriever_query: Optional[str]
+    web_search_query: Optional[str]
     retrieved_contexts: List[str]
-    relevant_contexts: List[str]
+    relevant_contexts: Annotated[List[str],add_messages]
     answer_for_query: str
     generated_response: str
     is_grounded: bool

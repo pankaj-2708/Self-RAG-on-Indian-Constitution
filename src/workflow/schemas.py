@@ -55,3 +55,17 @@ class schema_for_rewrite_query_node(BaseModel):
 parser_for_rewrite_query_node = PydanticOutputParser(
     pydantic_object=schema_for_rewrite_query_node
 )
+
+class schema_for_retriever_query_node(BaseModel):
+    retriever_query: str = Field(..., description="Optimized search query for the internal vector database retrieval")
+
+parser_for_retriever_query_node = PydanticOutputParser(
+    pydantic_object=schema_for_retriever_query_node
+)
+
+class schema_for_web_search_query_node(BaseModel):
+    web_search_query: str = Field(..., description="Optimized search query for the web search engine")
+
+parser_for_web_search_query_node = PydanticOutputParser(
+    pydantic_object=schema_for_web_search_query_node
+)

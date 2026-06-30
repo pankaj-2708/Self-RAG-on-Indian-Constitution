@@ -8,7 +8,7 @@ parser.add_argument("--thread_id",required=True)
 
 args = parser.parse_args()
 
-thread_id=args.thread_id
+thread_id=str(args.thread_id)
 
 if __name__ == "__main__":
     while True:
@@ -29,5 +29,5 @@ if __name__ == "__main__":
         ):
             print(f"{list(chunk.keys())[0]} is completed")
 
-        response = workflow.get_state(config={"configurable": {"thread_id": "2"}})
+        response = workflow.get_state(config={"configurable": {"thread_id": thread_id}})
         print("\nAI- ", response.values["generated_response"])
