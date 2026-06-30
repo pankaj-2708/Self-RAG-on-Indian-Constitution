@@ -87,7 +87,7 @@ def aggregate_relevance(state):
     return {}
 
 def answer_from_context_node(state: schema):
-    contexts = state["relevant_contexts"]
+    contexts = [x.content for x  in state["relevant_contexts"]]
     sys_prompt = SystemMessage(content=sys_prompt_for_answer_from_context_node)
 
     context = ""
@@ -106,7 +106,7 @@ def answer_from_context_node(state: schema):
     return {"generated_response": res}
 
 def check_answer_grounded_node(state: schema):
-    contexts = state["relevant_contexts"]
+    contexts = [x.content for x  in state["relevant_contexts"]]
     sys_prompt = SystemMessage(content=sys_prompt_for_check_answer_grounded_node)
     context = ""
     for i in contexts:
@@ -124,7 +124,7 @@ def check_answer_grounded_node(state: schema):
     return {"is_grounded": res.is_grounded, "evidence": res.evidence}
 
 def revise_answer_node(state: schema):
-    contexts = state["relevant_contexts"]
+    contexts =[x.content for x  in state["relevant_contexts"]]
     context = ""
     for i in contexts:
         context += i

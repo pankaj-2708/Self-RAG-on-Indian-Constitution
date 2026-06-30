@@ -68,9 +68,9 @@ graph.add_conditional_edges(
 )
 graph.add_edge("rewrite_query_node", "retrieval_decider_node")
 
-workflow = graph.compile()
+workflow = graph.compile(checkpointer=ck_ptr)
 
-graph_png_bytes = workflow.get_graph().draw_mermaid_png()
+# graph_png_bytes = workflow.get_graph().draw_mermaid_png()
 
-with open("workflow_image.png", "wb") as f:
-    f.write(graph_png_bytes)
+# with open("workflow_image.png", "wb") as f:
+#     f.write(graph_png_bytes)

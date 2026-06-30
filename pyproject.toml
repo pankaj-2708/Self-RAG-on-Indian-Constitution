@@ -24,6 +24,7 @@ dependencies = [
     "ragas>=0.4.3",
     "rapidfuzz>=3.14.5",
     "requests>=2.33.1",
+    "rich>=14.3.4",
     "selenium>=4.43.0",
     "sentence-transformers>=5.4.1",
     "tqdm>=4.67.3",
