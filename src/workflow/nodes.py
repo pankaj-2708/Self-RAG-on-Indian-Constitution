@@ -1,7 +1,8 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 from workflow.state import schema
 from workflow.config import (
-    main_model, critic_model, judge_model, query_rewrite_model,
+    decision_model, query_gen_model, generation_model, grounding_model,
+    critic_model, judge_model, query_rewrite_model,
     retriever, tavily_tool
 )
 from workflow.schemas import (
@@ -34,7 +35,7 @@ def retrieval_decider_node(state: schema):
         HumanMessage(content=f"User Query - {state['user_query']}"),
     ]
     res = parser_for_retrieval_decider_node.invoke(
-        main_model.invoke(inp).content
+        decision_model.invoke(inp).content
     ).retrieval_required
     return {"retrieval_required": res}
 
@@ -44,18 +45,28 @@ def generate_retriever_query_node(state: schema):
         HumanMessage(content=f"User Query - {state['user_query']}"),
     ]
     res = parser_for_retriever_query_node.invoke(
-        main_model.invoke(inp).content
-    ).retriever_query
-    return {"retriever_query": res}
+        query_gen_model.invoke(inp).content
+    ).retriever_queries
+    return {"retriever_queries": res}
 
 def retrieve_node(state: schema):
     global retriever
-    query = state.get("retriever_query") or state["user_query"]
-    retrieved_contexts = retriever.invoke(query, k=state["k"])
-    return {"retrieved_contexts": [i.page_content for i in retrieved_contexts]}
+    queries = state.get("retriever_queries") or [state["user_query"]]
+    if not queries:
+        queries = [state["user_query"]]
+    
+    all_contexts = []
+    seen = set()
+    for query in queries:
+        retrieved_contexts = retriever.invoke(query, k=state["k"])
+        for doc in retrieved_contexts:
+            if doc.page_content not in seen:
+                seen.add(doc.page_content)
+                all_contexts.append(doc.page_content)
+    return {"retrieved_contexts": all_contexts}
 
 def direct_generation_node(state: schema):
-    res = main_model.invoke(state["user_query"]).content
+    res = generation_model.invoke(state["user_query"]).content
     return {"generated_response": res}
 
 def fanout_relevant_node(state:schema):
@@ -72,7 +83,7 @@ def is_relevant_node(inp):
     hmn_prompt = f"Query - {inp['user_query']}" + f"\n Context - \n {inp['context']}"
 
     res = parser_for_is_relevant_node.invoke(
-            main_model.invoke(
+            decision_model.invoke(
                 [sys_prompt, HumanMessage(content=hmn_prompt)]
             ).content
         )
@@ -101,7 +112,7 @@ def answer_from_context_node(state: schema):
     inp = [sys_prompt,hmn_prompt]
 
     res = parser_for_answer_from_context_node.invoke(
-        main_model.invoke(inp).content
+        generation_model.invoke(inp).content
     ).response
     return {"generated_response": res}
 
@@ -118,7 +129,7 @@ def check_answer_grounded_node(state: schema):
     )
 
     res = parser_for_schema_for_check_answer_grounded_node.invoke(
-        main_model.invoke([sys_prompt, human_pr]).content
+        grounding_model.invoke([sys_prompt, human_pr]).content
     )
 
     return {"is_grounded": res.is_grounded, "evidence": res.evidence}
@@ -180,15 +191,26 @@ def generate_web_search_query_node(state: schema):
         HumanMessage(content=f"User Query - {state['user_query']}"),
     ]
     res = parser_for_web_search_query_node.invoke(
-        main_model.invoke(inp).content
-    ).web_search_query
-    return {"web_search_query": res}
+        query_gen_model.invoke(inp).content
+    ).web_search_queries
+    return {"web_search_queries": res}
 
 def web_search_node(state: schema):
-    query = state.get("web_search_query") or state["user_query"]
-    x = tavily_tool.invoke(query)
+    queries = state.get("web_search_queries") or [state["user_query"]]
+    if not queries:
+        queries = [state["user_query"]]
+    
     res = []
-    for r in x["results"]:
-        p = f"Source - {r['url']} \n title - {r['title']} \n {r['content']}"
-        res.append(p)
+    seen_urls = set()
+    for query in queries:
+        try:
+            x = tavily_tool.invoke(query)
+            for r in x.get("results", []):
+                if r['url'] not in seen_urls:
+                    seen_urls.add(r['url'])
+                    p = f"Source - {r['url']} \n title - {r['title']} \n {r['content']}"
+                    res.append(p)
+        except Exception as e:
+            # Print/log the exception and keep going with other queries
+            print(f"Error querying Tavily for '{query}': {e}")
     return {"relevant_contexts": res, "web_searched": True}

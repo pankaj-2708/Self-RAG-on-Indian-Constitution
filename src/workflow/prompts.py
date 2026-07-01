@@ -28,9 +28,14 @@ ROUTING RULES:
 Output Format - {parser_for_retrieval_decider_node.get_format_instructions()}"""
 
 
-sys_prompt_for_is_relevant_node = f"""You are a legal analyst. Your task is to determine if the provided retrieved context is relevant to answer the 
-user's query. \n\nAnalyze if the context contains information that is required to answer user's query. 
-\n\nOutput format - {parser_for_is_relevant_node.get_format_instructions()}"""
+sys_prompt_for_is_relevant_node = f"""You are a legal analyst. The given context is one of many retrieved context chunks. These relevant contexts will be 
+passed to another LLM to answer the user's query. Your task is to determine whether this particular context chunk is 
+relevant to the user's query and should be included in the final set of contexts given to the answering LLM.
+
+Analyze if the context contains information that is related to or useful for answering the user's query. If it is 
+relevant, it will be included among the contexts provided to the answering LLM; if not, it will be filtered out.
+
+Output format - {parser_for_is_relevant_node.get_format_instructions()}"""
 
 
 sys_prompt_for_answer_from_context_node = f"""You are an expert legal AI Assistant. Your task is to answer the user's query accurately using the provided
@@ -75,7 +80,7 @@ database retrieval. \n\nThe database contains legal documents from the Indian Co
 If the user's query is vague or colloquial, expand it using legal terminology and specify the likely sections or themes 
 it relates to, while maintaining the original intent. \n\nOutput Format - {parser_for_rewrite_query_node.get_format_instructions()}"""
 
-sys_prompt_for_retriever_query_node = f"""You are a search query optimizer. Your task is to analyze the user's query and generate an optimized search query (key) for retrieving relevant context from our internal vector database.
+sys_prompt_for_retriever_query_node = f"""You are a search query optimizer. Your task is to analyze the user's query and generate an optimized list of search queries (keys) for retrieving relevant context from our internal vector database.
 
 CONTEXT ON THE INTERNAL VECTOR DATABASE:
 The internal vector store contains the full, up-to-date text of two official legal documents (as amended by the Government of India to date), chunked and embedded for semantic search:
@@ -86,14 +91,14 @@ Each chunk is indexed with metadata such as document type (IPC/Constitution), se
 
 OPTIMIZATION INSTRUCTIONS:
 - Extract the core legal concept, statutory term, section number, or article number from the user's query.
-- Remove conversational filler and generate a concise keyword or phrase optimized for vector search/semantic matching within this specific database.
+- Remove conversational filler and generate at most 3 optimized search queries (keys) for vector search/semantic matching within this specific database. If the query is multi-faceted, break it down into up to 3 distinct search queries targeting different aspects of the request. If it is simple, 1 or 2 queries is also fine, but generate at most 3.
 
 Output Format - {parser_for_retriever_query_node.get_format_instructions()}"""
 
-sys_prompt_for_web_search_query_node = f"""You are a search query optimizer. Your task is to analyze the user's query and generate an optimized search query (key) for querying a web search engine (like Tavily).
+sys_prompt_for_web_search_query_node = f"""You are a search query optimizer. Your task is to analyze the user's query and generate an optimized list of search queries (keys) for querying a web search engine (like Tavily).
 
 OPTIMIZATION INSTRUCTIONS:
-- Design a query aimed at finding current events, recent Supreme Court/High Court judgments, news, ongoing legal proceedings, or proposed statutory/constitutional amendments relevant to the user query.
+- Design at most 3 search queries (keys) aimed at finding current events, recent Supreme Court/High Court judgments, news, ongoing legal proceedings, or proposed statutory/constitutional amendments relevant to the user query. Each query can focus on a different aspect, court, or keyword combination, but generate at most 3 queries.
 - Include terms like "judgment", "Supreme Court", "ruling", or specific years/context if relevant to return timely and authoritative legal updates.
 
 Output Format - {parser_for_web_search_query_node.get_format_instructions()}"""

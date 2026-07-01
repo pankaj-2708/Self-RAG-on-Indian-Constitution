@@ -8,4 +8,5 @@ data
 /notebooks/ragas.ipynb
 .ipynb_checkpoints
 __pycache__
-src/workflow_backup.py
+src/workflow_backup.py
+*.excalidraw

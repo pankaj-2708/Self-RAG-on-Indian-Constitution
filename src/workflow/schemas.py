@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Literal
+from typing import Literal, List
 from langchain_core.output_parsers import PydanticOutputParser
 
 class schema_for_retrieval_decider_node(BaseModel):
@@ -57,14 +57,14 @@ parser_for_rewrite_query_node = PydanticOutputParser(
 )
 
 class schema_for_retriever_query_node(BaseModel):
-    retriever_query: str = Field(..., description="Optimized search query for the internal vector database retrieval")
+    retriever_queries: List[str] = Field(..., description="Optimized search queries for the internal vector database retrieval. Generate at most 3 queries.")
 
 parser_for_retriever_query_node = PydanticOutputParser(
     pydantic_object=schema_for_retriever_query_node
 )
 
 class schema_for_web_search_query_node(BaseModel):
-    web_search_query: str = Field(..., description="Optimized search query for the web search engine")
+    web_search_queries: List[str] = Field(..., description="Optimized search queries for the web search engine. Generate at most 3 queries.")
 
 parser_for_web_search_query_node = PydanticOutputParser(
     pydantic_object=schema_for_web_search_query_node
